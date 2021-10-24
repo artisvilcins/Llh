@@ -1,0 +1,146 @@
+﻿@inject HttpClient client
+@inject QuestionsHubService questionsHub
+@inject SoundNotificationService notification
+
+<h5>Pasniedzēja jautājumi</h5>
+<div class="row" style="margin-bottom: 40px">
+    <input @bind-value="questionInput"
+           @onkeyup="@OnAddquestionEnter"
+           class="form-control col-9"
+           placeholder="Tavs jautājums...">
+    <button @onclick="AddQuestion" class="btn btn-primary col-col-3 m-1">
+        Pievienot
+    </button>
+</div>
+
+
+    @foreach (LecturerQuestionDto question in questions)
+{
+    <div>
+        <h6>@question.Question</h6>
+
+        <div class="row">
+            <div class="col-6">
+                Jā: @question.Answers?.Count(q => q.Answer == YesNoQuestionAnswer.Yes)
+            </div>
+            <div class="col-6">
+                Nē: @question.Answers?.Count(q => q.Answer == YesNoQuestionAnswer.No)
+            </div>
+        </div>
+
+        @if (!question.IsClosed)
+        {
+            <button class="btn btn-primary btn-sm"
+            @onclick="() => AddQuestionAnswer(question, YesNoQuestionAnswer.Yes)">
+                Jā
+            </button>
+
+            <button class="btn btn-warning btn-sm ml-1"
+            @onclick="() => AddQuestionAnswer(question, YesNoQuestionAnswer.No)">
+                Nē
+            </button>
+
+            <button class="btn btn-danger btn-sm ml-1"
+            @onclick="() => CloseQuestion(question)">
+                Aizvērt
+            </button>
+        }
+
+    </div>
+}
+
+
+@code {
+
+    private string questionInput;
+
+    private List<LecturerQuestionDto> questions;
+
+    protected override void OnInitialized()
+    {
+        questions = new List<LecturerQuestionDto>();
+
+        questionsHub.NewLecturerQuestion += async newQuestion =>
+        {
+            questions.Insert(0, newQuestion);
+
+            StateHasChanged();
+
+            await notification.PlaySound();
+        };
+
+        questionsHub.LecturerQuestionMarkClosed += questionId =>
+        {
+            var question = questions.FirstOrDefault(q => q.Id == questionId);
+
+            if (question != null)
+            {
+                question.IsClosed = true;
+
+                questions = questions.OrderBy(q => q.IsClosed)
+                    .ThenByDescending(q => q.Created).ToList();
+
+                StateHasChanged();
+            }
+        };
+
+        questionsHub.LecturerQuestionAddAnswer += answer =>
+       {
+           var question = questions.FirstOrDefault(q => q.Id == answer.QuestionId);
+
+           if (question != null)
+           {
+               if (question.Answers == null)
+               {
+                   question.Answers = new List<LecturerQuestionAnswerDto>();
+               }
+
+               question.Answers.Add(answer);
+
+               StateHasChanged();
+           }
+       };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        questions = await client.GetFromJsonAsync<List<LecturerQuestionDto>>("LecturerQuestions");
+    }
+
+    public async Task CloseQuestion(LecturerQuestionDto questionDto)
+    {
+        var response = await client.PostAsync($"LecturerQuestions/{questionDto.Id}/mark-closed", null);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task AddQuestionAnswer(LecturerQuestionDto questionDto, YesNoQuestionAnswer answer)
+    {
+        var response = await client.PostAsync($"LecturerQuestions/{questionDto.Id}/answer/{answer}", null);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task OnAddquestionEnter(KeyboardEventArgs e)
+    {
+        if (e.Code == "Enter" || e.Code == "NumpadEnter")
+        {
+            await AddQuestion();
+        }
+    }
+
+    public async Task AddQuestion()
+    {
+        if (!string.IsNullOrWhiteSpace(questionInput))
+        {
+            var question = new LecturerQuestionDto
+                {
+                    Question = questionInput
+                };
+
+            var response = await client.PostAsJsonAsync<LecturerQuestionDto>("LecturerQuestions", question);
+            response.EnsureSuccessStatusCode();
+
+            questionInput = "";
+        }
+    }
+
+}

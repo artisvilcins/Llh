@@ -1,0 +1,107 @@
+﻿@inject HttpClient client
+@inject QuestionsHubService questionsHub
+@inject SoundNotificationService notification
+
+<h5>Uzdod savu jautājumu</h5>
+
+<div class="row" style="margin-bottom: 40px">
+    <input @bind-value="questionInput"
+           @onkeyup="@OnAddquestionEnter"
+           class="form-control col-9"
+           placeholder="Tavs jautājums...">
+    <button @onclick="() => AddQuestion()" class="btn btn-primary col-col-3 m-1">
+        Pievienot
+    </button>
+</div>
+
+
+@foreach (StudentQuestionDto question in questions)
+{
+    <div>
+        @question.Question
+        @if (question.IsAnsered)
+        {
+            <span style="margin-left: 10px;color:springgreen">OK</span>
+        }
+        else
+        {
+            <button @onclick="() => MarkAnsered(question)"
+            class="btn btn-primary btn-sm"
+            style="margin-left: 20px">
+                Ir atbildēts
+            </button>
+        }
+    </div>
+}
+
+@code {
+
+    string questionInput;
+
+    List<StudentQuestionDto> questions;
+
+    protected override void OnInitialized()
+    {
+        questions = new List<StudentQuestionDto>();
+
+        questionsHub.NewStudentQuestion += async newQuestion =>
+        {
+            questions.Insert(0, newQuestion);
+
+            StateHasChanged();
+
+            await notification.PlaySound();
+        };
+
+        questionsHub.StudentQuestionAnswered += questionId =>
+        {
+            var question = questions.FirstOrDefault(q => q.Id == questionId);
+
+            if (question != null)
+            {
+                question.IsAnsered = true;
+
+                questions = questions.OrderBy(q => q.IsAnsered)
+                                    .ThenByDescending(q => q.Created).ToList();
+
+                StateHasChanged();
+            }
+        };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        questions = await client.GetFromJsonAsync<List<StudentQuestionDto>>("StudentQuestions");
+    }
+
+    public async Task MarkAnsered(StudentQuestionDto question)
+    {
+        var response = await client.PostAsync($"StudentQuestions/{question.Id}/mark-ansered", null);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task OnAddquestionEnter(KeyboardEventArgs e)
+    {
+        if (e.Code == "Enter" || e.Code == "NumpadEnter")
+        {
+            await AddQuestion();
+        }
+    }
+
+    public async Task AddQuestion()
+    {
+        if (!string.IsNullOrWhiteSpace(questionInput))
+        {
+            var question = new StudentQuestionDto
+                {
+                    Question = questionInput,
+                    IsAnsered = false
+                };
+
+            var response = await client.PostAsJsonAsync<StudentQuestionDto>("StudentQuestions", question);
+            response.EnsureSuccessStatusCode();
+
+            questionInput = "";
+        }
+    }
+}

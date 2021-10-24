@@ -1,0 +1,47 @@
+﻿@inherits LayoutComponentBase
+@inject SoundNotificationService notification
+
+<div class="page">
+
+    <div class="main">
+        <div class="content px-4">
+            <h1>Lekciju palīgs</h1>
+
+            <div class="form-check form-switch">
+
+                <input class="form-check-input" type="checkbox" 
+                id="soundNotificationenabled" 
+                @bind="notification.IsEnabled">
+
+                <label class="form-check-label" for="soundNotificationenabled">
+                    Skaņas paziņojums
+                </label>
+            </div>
+
+            @Body
+        </div>
+    </div>
+</div>
+
+@if (isPlayingsound)
+{
+    <audio autoplay controls style="display: none"><source src="/mixkit-correct-answer-tone-2870.mp3" /></audio>
+}
+else
+{
+    <audio controls muted style="display: none"><source src="/mixkit-correct-answer-tone-2870.mp3" /></audio>
+}
+
+@code
+{
+    private bool isPlayingsound;
+
+    protected override void OnInitialized()
+    {
+        notification.IsPlayingsoundChanged += () =>
+        {
+            isPlayingsound = notification.IsPlayingsound;
+            StateHasChanged();
+        };
+    }
+}
